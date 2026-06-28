@@ -9,13 +9,31 @@ def padronizar_texto(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def tratar_nulos(df: pd.DataFrame) -> pd.DataFrame:
-    """Realiza a imputation de nulos utilizando a mediana para numéricos e 'desconhecido' para categorias."""
-    colunas_numericas = df.select_dtypes(include=['number']).columns
-    df[colunas_numericas] = df[colunas_numericas].fillna(df[colunas_numericas].median())
+    """Realiza a imputation de nulos utilizando a mediana agrupada por HORA 
+       para manter o perfil do ciclo diário e evita distorções noturnas."""
+    df_tratado = df.copy()
     
-    colunas_categoricas = df.select_dtypes(include=['object']).columns
-    df[colunas_categoricas] = df[colunas_categoricas].fillna('desconhecido')
-    return df
+    # Se a coluna hour não existir diretamente, tentamos extrair do Time
+    if 'hour' not in df_tratado.columns and 'Time' in df_tratado.columns:
+        df_tratado['hour'] = pd.to_datetime(df_tratado['Time']).dt.hour
+    
+    colunas_numericas = df_tratado.select_dtypes(include=['number']).columns
+    
+    # Se tivermos a coluna 'hour', preenchemos pela mediana daquela hora específica
+    if 'hour' in df_tratado.columns:
+        for col in colunas_numericas:
+            if col != 'hour':
+                # Preenche o nulo com a mediana dos dados que pertencem à mesma hora do dia
+                df_tratado[col] = df_tratado.groupby('hour')[col].transform(lambda x: x.fillna(x.median()))
+    
+    # Backup de segurança: Se ainda sobrar algum nulo (ex: coluna inteira vazia), usa a mediana global
+    df_tratado[colunas_numericas] = df_tratado[colunas_numericas].fillna(df_tratado[colunas_numericas].median())
+    
+    # Trata colunas de texto (categorias)
+    colunas_categoricas = df_tratado.select_dtypes(include=['object']).columns
+    df_tratado[colunas_categoricas] = df_tratado[colunas_categoricas].fillna('desconhecido')
+    
+    return df_tratado
 
 def isolar_outliers_iqr(df: pd.DataFrame, colunas: list) -> pd.DataFrame:
     """Aplica o cálculo estatístico do IQR para remover outliers, 
