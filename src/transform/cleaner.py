@@ -9,7 +9,7 @@ def padronizar_texto(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def tratar_nulos(df: pd.DataFrame) -> pd.DataFrame:
-    """Realiza a imputação de nulos utilizando a mediana para numéricos e 'desconhecido' para categorias."""
+    """Realiza a imputation de nulos utilizando a mediana para numéricos e 'desconhecido' para categorias."""
     colunas_numericas = df.select_dtypes(include=['number']).columns
     df[colunas_numericas] = df[colunas_numericas].fillna(df[colunas_numericas].median())
     
@@ -34,7 +34,7 @@ def isolar_outliers_iqr(df: pd.DataFrame, colunas: list) -> pd.DataFrame:
                 limite_inferior = Q1 - 1.5 * IQR
                 limite_superior = Q3 + 1.5 * IQR
                 
-                # Regra mágica: Mantém as noites (== 0) E mantém os dias dentro do limite normal
+                # Regra: Mantém as noites (== 0) E mantém os dias dentro do limite normal
                 df_limpo = df_limpo[(df_limpo[col] == 0) | ((df_limpo[col] >= limite_inferior) & (df_limpo[col] <= limite_superior))]
                 
     return df_limpo
@@ -45,9 +45,10 @@ def realizar_transformacao(df: pd.DataFrame) -> pd.DataFrame:
     df = padronizar_texto(df)
     df = tratar_nulos(df)
     
-    # Aplica o filtro IQR nas colunas numéricas
-    colunas_numericas = df.select_dtypes(include=['number']).columns.tolist()
-    df = isolar_outliers_iqr(df, colunas_numericas)
+    # CORREÇÃO DO BUG: Restringe o IQR apenas para variáveis físicas contínuas.
+    # Evita aplicar IQR em variáveis de tempo/metadados como 'hour', 'month' ou 'isSun'
+    colunas_para_iqr = ['Energy delta[Wh]', 'GHI', 'temp', 'pressure', 'humidity', 'wind_speed']
+    df = isolar_outliers_iqr(df, colunas_para_iqr)
     
     linhas, colunas = df.shape
     logging.info(f"Volumetria após tratamento -> Linhas: {linhas} | Colunas: {colunas}")
