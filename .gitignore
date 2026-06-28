@@ -1,0 +1,11 @@
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Arquivos locais que não devem ir para o GitHub
+outputs/
+dados_brutos/
+*.csv
+*.png
+*.jpg
+*.jpeg

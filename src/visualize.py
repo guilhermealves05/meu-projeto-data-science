@@ -2,9 +2,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import logging
+import os
 
 def gerar_visualizacao(df: pd.DataFrame):
     logging.info("Iniciando geração do pacote completo de visualizações (Dashboard)...")
+    
+    # Garante que a pasta outputs existe antes de salvar os gráficos
+    diretorio_output = "outputs"
+    os.makedirs(diretorio_output, exist_ok=True)
     
     df_plot = df.copy()
     
@@ -31,12 +36,12 @@ def gerar_visualizacao(df: pd.DataFrame):
     plt.title('1. Ciclo Diário Médio: Geração de Energia por Hora do Dia', fontsize=14, pad=15)
     plt.xlabel('Hora do Dia (0h às 23h)', fontsize=12)
     plt.ylabel('Média de Energia (Wh)', fontsize=12)
-    plt.xticks(range(0, 24, 2)) # Marca o eixo X de 2 em 2 horas
+    plt.xticks(range(0, 24, 2)) 
     plt.ylim(bottom=0)
     plt.xlim(0, 23)
     plt.grid(True, linestyle=':', alpha=0.7)
     
-    plt.savefig('grafico_1_ciclo_diario.png', bbox_inches='tight', dpi=300)
+    plt.savefig(os.path.join(diretorio_output, 'grafico_1_ciclo_diario.png'), bbox_inches='tight', dpi=300)
     plt.close()
 
     # =====================================================================
@@ -60,14 +65,13 @@ def gerar_visualizacao(df: pd.DataFrame):
     plt.ylim(bottom=0)
     plt.grid(True, linestyle='--', alpha=0.6)
     
-    plt.savefig('grafico_2_historico_mensal.png', bbox_inches='tight', dpi=300)
+    plt.savefig(os.path.join(diretorio_output, 'grafico_2_historico_mensal.png'), bbox_inches='tight', dpi=300)
     plt.close()
 
     # =====================================================================
     # GRÁFICO 3: Dispersão (Radiação Solar vs Energia) apenas de DIA
     # =====================================================================
     logging.info("Gerando Gráfico 3: Relação de Dispersão (Causalidade)...")
-    # Pega só os dados onde há luz e geração (descarta a noite para o gráfico ficar legível)
     df_dia = df_plot[(df_plot['GHI'] > 0) & (df_plot[coluna_energia] > 0)]
     
     plt.figure(figsize=(10, 5))
@@ -80,7 +84,7 @@ def gerar_visualizacao(df: pd.DataFrame):
     plt.xlim(left=0)
     plt.grid(True, linestyle=':', alpha=0.7)
     
-    plt.savefig('grafico_3_dispersao_radiacao.png', bbox_inches='tight', dpi=300)
+    plt.savefig(os.path.join(diretorio_output, 'grafico_3_dispersao_radiacao.png'), bbox_inches='tight', dpi=300)
     plt.close()
 
-    logging.info("Todos os gráficos foram exportados com sucesso na raiz do projeto!")
+    logging.info("Todos os gráficos foram exportados com sucesso na pasta outputs!")
