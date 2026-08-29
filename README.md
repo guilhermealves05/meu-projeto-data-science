@@ -104,6 +104,78 @@ Nesse cenário, apenas a intensidade da radiação seria alterada, permitindo is
 
 ---
 
+# 📊 Parte 2 - Inferência Estatística e Teste A/B
+
+## 4. Unidade de Análise
+
+A base tratada pelo pipeline atual possui **186.625 registros**. Para a análise inferencial, as medições de 15 em 15 minutos foram agrupadas por dia, considerando somente os períodos em que `isSun = 1`. A base analítica resultante possui **2.005 dias**, entre 01/01/2017 e 31/08/2022.
+
+Essa agregação foi escolhida para reduzir a dependência entre observações consecutivas. Se cada medição de 15 minutos fosse tratada como independente, o tamanho efetivo da amostra seria artificialmente inflado e os intervalos poderiam parecer mais precisos do que realmente são.
+
+A variável central é `energia_media`, definida como a média de `Energy delta[Wh]` durante as horas de sol em cada dia. Também foram calculadas as médias diárias de radiação, temperatura, umidade, nebulosidade, vento, chuva e neve, formando uma interface única para os demais modelos.
+
+## 5. Estimação da Média e Bootstrap
+
+Foram obtidas as seguintes estatísticas para `energia_media`:
+
+| Medida | Resultado |
+|---|---:|
+| Tamanho da amostra (N) | 2.005 dias |
+| Média amostral | 1.007,27 Wh |
+| Desvio padrão amostral | 658,75 Wh |
+| Erro padrão | 14,71 Wh |
+| Assimetria amostral | 0,124 |
+
+O Bootstrap foi executado com **5.000 réplicas**, reamostragem com reposição e semente aleatória 42. Em cada réplica foram sorteados 2.005 dias e calculada uma nova média. O intervalo não paramétrico corresponde aos percentis 2,5% e 97,5% dessas médias.
+
+| Método do IC de 95% | Limite inferior | Limite superior |
+|---|---:|---:|
+| Bootstrap percentil | 978,41 Wh | 1.035,74 Wh |
+| Aproximação normal | 978,44 Wh | 1.036,11 Wh |
+
+Os intervalos são praticamente coincidentes. A diferença pequena entre os limites indica que, para esta amostra, a distribuição Bootstrap da média se aproxima bem da distribuição normal prevista pelo Teorema Central do Limite.
+
+### Aplicação do Teorema Central do Limite
+
+As condições do TCL são razoáveis porque a amostra possui 2.005 unidades diárias e a assimetria observada, 0,124, é baixa. Além disso, o agrupamento diário reduz a forte dependência existente entre medições vizinhas de 15 minutos.
+
+Entretanto, a independência não é perfeita: dias consecutivos podem compartilhar o mesmo regime meteorológico, há sazonalidade ao longo dos anos e alguns dias possuem menos medições solares que outros. O dataset também não constitui uma amostra aleatória de todas as usinas solares. Portanto, os intervalos descrevem com maior segurança o contexto representado pela base, e não todas as instalações fotovoltaicas possíveis.
+
+## 6. Teste A/B por Permutação
+
+O objetivo foi verificar se a média diária de energia difere entre dois cenários meteorológicos mutuamente exclusivos:
+
+* **Grupo A - dias claros:** `nuvens_media <= 30%`;
+* **Grupo B - dias nublados:** `nuvens_media >= 70%`.
+
+As hipóteses formais do teste bicaudal foram:
+
+* **H₀:** μ<sub>claros</sub> = μ<sub>nublados</sub>;
+* **H₁:** μ<sub>claros</sub> ≠ μ<sub>nublados</sub>;
+* **Nível de significância:** α = 0,05.
+
+| Resultado | Dias claros | Dias nublados |
+|---|---:|---:|
+| Quantidade de dias | 276 | 1.122 |
+| Média de energia | 1.751,20 Wh | 639,19 Wh |
+
+A estatística observada foi `média_claros - média_nublados = 1.112,01 Wh`. Para construir a distribuição esperada sob H₀, os rótulos dos 1.398 dias selecionados foram embaralhados **5.000 vezes**, preservando os tamanhos originais dos grupos. O valor-p bicaudal foi calculado pela proporção corrigida de permutações em que `|diferença simulada| >= |diferença observada|`.
+
+O resultado foi **p = 0,000200**. Como `p < 0,05`, a decisão formal é **rejeitar H₀**. Os dados fornecem evidência estatística de diferença entre a geração média dos dias claros e nublados no conjunto analisado.
+
+Na prática, o resultado indica que a previsão de nebulosidade pode apoiar o planejamento operacional: dias claros apresentam maior potencial de geração e dias muito nublados exigem previsões mais conservadoras ou fontes complementares. Isso não prova que a nebulosidade isoladamente causou toda a diferença, pois GHI, estação do ano, temperatura, duração do dia, chuva e condição dos painéis podem atuar como confundidores ou mediadores.
+
+## 7. Reprodutibilidade da Inferência
+
+As duas simulações usam `random_state=42`, tornando os resultados reproduzíveis. O comando `python main.py` reconstrói o CSV canônico na raiz, prepara a base diária, executa os 5.000 ciclos de cada procedimento, exibe todos os resultados no terminal e gera:
+
+* `distribuicao_bootstrap.png` - histograma das médias Bootstrap, com os dois ICs de 95%;
+* `distribuicao_permutacao.png` - distribuição sob H₀, com `±|diferença observada|`.
+
+Os módulos de regressão, classificação e aprendizado não supervisionado seguem uma interface comum. Assim que os arquivos dos demais integrantes forem adicionados em `src/models/`, o orquestrador passará a executá-los automaticamente.
+
+---
+
 # ⚙️ Como Executar o Projeto
 
 ## 1. Instalação
@@ -172,7 +244,10 @@ O processo realizará automaticamente:
 * Tratamento de valores ausentes;
 * Remoção de outliers utilizando IQR;
 * Limpeza da base;
-* Geração das visualizações.
+* Geração das visualizações exploratórias;
+* Construção da base analítica diária;
+* Bootstrap com dois intervalos de confiança;
+* Teste A/B por permutação.
 
 ---
 
@@ -185,6 +260,13 @@ dados_limpos_final.csv
 ```
 
 Base de dados tratada e pronta para futuras análises.
+
+```
+distribuicao_bootstrap.png
+distribuicao_permutacao.png
+```
+
+Gráficos inferenciais obrigatórios da Parte 2, gerados na raiz do projeto.
 
 ```
 grafico_1_ciclo_diario.png
@@ -218,10 +300,20 @@ Projeto/
 ├── grafico_1_ciclo_diario.png
 ├── grafico_2_historico_mensal.png
 ├── grafico_3_dispersao_radiacao.png
+├── distribuicao_bootstrap.png
+├── distribuicao_permutacao.png
 │
 ├── main.py
 ├── requirements.txt
-└── README.md
+├── README.md
+└── src/
+    ├── analysis_utils.py
+    ├── inference/
+    │   ├── bootstrap.py
+    │   └── ab_testing.py
+    ├── extract/extractor.py
+    ├── transform/cleaner.py
+    └── visualize.py
 ```
 
 ---

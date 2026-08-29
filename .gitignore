@@ -9,3 +9,10 @@ dados_brutos/
 *.png
 *.jpg
 *.jpeg
+
+# Gráficos obrigatórios da AVP2 devem permanecer versionáveis na raiz
+!distribuicao_bootstrap.png
+!distribuicao_permutacao.png
+!curva_cotovelo_kmeans.png
+!clusters_kmeans.png
+!pca_projecao.png
