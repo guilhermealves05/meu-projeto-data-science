@@ -4,11 +4,10 @@ import matplotlib.dates as mdates
 import logging
 import os
 
-def gerar_visualizacao(df: pd.DataFrame):
+def gerar_visualizacao(df: pd.DataFrame, diretorio_output="outputs"):
     logging.info("Iniciando geração do pacote completo de visualizações (Dashboard)...")
     
     # Garante que a pasta outputs existe antes de salvar os gráficos
-    diretorio_output = "outputs"
     os.makedirs(diretorio_output, exist_ok=True)
     
     df_plot = df.copy()
@@ -71,7 +70,7 @@ def gerar_visualizacao(df: pd.DataFrame):
     # =====================================================================
     # GRÁFICO 3: Dispersão (Radiação Solar vs Energia) apenas de DIA
     # =====================================================================
-    logging.info("Gerando Gráfico 3: Relação de Dispersão (Causalidade)...")
+    logging.info("Gerando Gráfico 3: Relação de Dispersão (Associação)...")
     df_dia = df_plot[(df_plot['GHI'] > 0) & (df_plot[coluna_energia] > 0)]
     
     plt.figure(figsize=(10, 5))

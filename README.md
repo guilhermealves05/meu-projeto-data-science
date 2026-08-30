@@ -1,344 +1,313 @@
-# 🌱 Pipeline de Dados - Energia, Clima e Recursos Renováveis
+# Energia, clima e recursos renováveis — AVP1 + AVP2
 
-> Projeto desenvolvido para a disciplina de **Ciência de Dados**, com foco na construção de um pipeline de tratamento e análise de dados relacionados à geração de energia renovável.
+Projeto acadêmico de Ciência de Dados — IFCE, Campus Tauá, tema F.
 
-## 👥 Equipe
+| Integrante | Responsabilidade |
+|---|---|
+| Guilherme Alves dos Santos | Base comum, Bootstrap, teste A/B, integração e reprodutibilidade |
+| Guilherme Monteiro | Regressão múltipla e comparação Logística × KNN |
+| Paulo Cosmo | PCA, K-Means, perfis e discussão causal/operacional |
 
-* Guilherme Alves
-* Guilherme Monteiro
-* Paulo Cosmo
+## 1. Executar e conferir
 
-**Disciplina:** Ciência de Dados
-**Tema Escolhido:** Opção F - Energia, Clima e Recursos Renováveis
+Ambiente de referência: **Python 3.12**. Versões principais fixadas em
+`requirements.txt`. No Windows/PowerShell, na pasta do projeto:
 
----
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe verificar_entrega.py
+```
 
-# 📖 Fundamentação Teórica e Análise de Domínio
+No Linux/macOS, crie o ambiente com `python3.12 -m venv .venv` e use
+`.venv/bin/python` nos demais comandos. Não é necessário ativar o ambiente.
+O bruto **já está versionado** em `dados_brutos/Renewable.csv`.
+`main.py` reconstrói o CSV limpo; não é preciso baixar outro dataset.
 
-## 1. Camada de Ingestão (Amostragem e Viés)
+A execução realiza ingestão, limpeza, EDA, agregação diária, inferência,
+regressão, classificação, PCA/K-Means e exportação de métricas. Todos os
+módulos são obrigatórios: uma dependência ausente interrompe a execução.
 
-### População-Alvo vs. Estrutura de Acesso
+As cinco figuras exigidas são salvas **na raiz**, mesmo ao executar o script
+a partir de outra pasta:
 
-### População-Alvo
+| Arquivo | Conteúdo |
+|---|---|
+| `distribuicao_bootstrap.png` | Médias reamostradas e dois ICs de 95% |
+| `distribuicao_permutacao.png` | Distribuição nula e diferença observada |
+| `pca_projecao.png` | Duas componentes principais |
+| `curva_cotovelo_kmeans.png` | Inércia e silhouette por k |
+| `clusters_kmeans.png` | Clusters projetados no PCA |
 
-O cenário ideal seria possuir um registro contínuo, universal e em tempo real de todas as instalações de painéis solares distribuídas em diferentes regiões climáticas e geográficas.
+Também são gerados `dados_limpos_final.csv`, `resultados_avp2.json` (métricas,
+versões, hash do bruto e contagens) e três gráficos exploratórios em `outputs/`.
+Cópias antigas dos gráficos exploratórios na raiz não são a saída atual.
+O verificador confere artefatos e consistência; não substitui a avaliação
+científica ou a conferência das regras de submissão do professor.
 
-### Estrutura de Acesso
+## 2. Dados, amostragem e tratamento — AVP1
 
-Os dados utilizados neste projeto foram obtidos por meio de um dataset disponível no Kaggle, representando um subconjunto específico de usinas solares no período entre **2017 e 2022**.
+A documentação original identifica a fonte como o dataset Kaggle
+*Renewable Power Generation and Weather Conditions*. O arquivo utilizado é
+exatamente o CSV versionado, cujo SHA-256 é registrado a cada execução.
+A localização, a quantidade de instalações e as unidades físicas de GHI/vento
+não foram confirmadas por um dicionário de dados. Não presumimos cobertura
+geográfica representativa nem convertemos essas unidades sem fonte.
 
-### Risco de Viés de Seleção
+A população de interesse são sistemas de geração solar; a estrutura de acesso
+é a série disponível de 2017–2022, não uma amostra probabilística de todas as
+usinas. Seleção dos locais, clima e período limitam generalizações.
 
-Existe um risco significativo de **viés de seleção**, pois os dados foram coletados em locais específicos, podendo representar principalmente regiões com alta incidência solar.
+O bruto tem **196.776 linhas e 17 colunas**; a limpeza canônica produz
+**186.625 linhas e 17 colunas**. O ETL normaliza textos, imputa números pela
+mediana de cada hora (com mediana global como alternativa) e filtra extremos
+sequencialmente por IQR em energia, GHI, temperatura, pressão, umidade e vento.
+Os quartis são calculados sobre valores positivos da variável; zeros são
+preservados. Isso não equivale a identificar dia/noite para toda variável física.
 
-Como consequência, um modelo treinado apenas com este conjunto de dados pode apresentar baixo desempenho quando aplicado em regiões com elevada nebulosidade, chuvas frequentes ou condições climáticas diferentes das presentes no dataset.
+A imputação pode reduzir artificialmente a dispersão e alterar relações.
+O IQR pode remover extremos legítimos, inclusive temperaturas negativas.
+A base final descreve os registros retidos: somas mensais após o filtro não
+são totais brutos auditados. A EDA mostra ciclo horário, evolução mensal e
+associação GHI × energia. Dispersão não comprova causalidade.
 
----
+## 3. Unidade analítica comum
 
-# 2. Análise Exploratória e Tratamento Estatístico (EDA)
+`src/analysis_utils.py` seleciona `isSun == 1` e agrega por data. São
+**2.005 dias**, de **01/01/2017 a 31/08/2022**. Todos os módulos usam essa base.
+`energia_media` é a média de `Energy delta[Wh]` dos intervalos solares retidos
+de cada dia: **Wh por intervalo observado, não energia total diária nem potência**.
+Cada dia recebe peso igual, mesmo com quantidades diferentes de observações.
 
-## Tratamento de Valores Nulos
+GHI, temperatura, umidade, nuvens e vento também são médias dos intervalos
+solares. Chuva, neve e contagem de observações ficam disponíveis, mas chuva
+e neve não entram nos preditores supervisionados nem no PCA.
+A agregação reduz pseudorreplicação de medições vizinhas, mas não elimina
+autocorrelação, sazonalidade ou viés de dias incompletos.
 
-Para os atributos numéricos ausentes foi utilizada a técnica de **imputação pela mediana**.
+## 4. Bootstrap, IC e Teorema Central do Limite
 
-### Impacto no Viés
+São **5.000 réplicas**, com reposição, tamanho N e `random_state=42`.
+O IC percentil usa os quantis 2,5% e 97,5% das médias reamostradas.
+O IC normal é `média ± 1,96 × s / sqrt(N)`, com desvio amostral (`ddof=1`).
 
-A imputação introduz um pequeno viés, já que assume que os valores ausentes seguem a tendência central dos dados, podendo ocultar eventos anômalos.
-
-### Impacto na Variância
-
-Por outro lado, essa estratégia reduz significativamente a variância do conjunto de dados, evitando a remoção de um grande número de registros e preservando a consistência da série temporal.
-
----
-
-## Tratamento de Outliers
-
-Foi aplicada uma adaptação da técnica do **Intervalo Interquartil (IQR)**.
-
-Antes do cálculo dos quartis (Q1 e Q3), os dados referentes ao período noturno foram separados, impedindo que valores naturalmente iguais a zero influenciassem os limites estatísticos.
-
-Dessa forma, apenas os registros diurnos participaram do cálculo dos limites para detecção de valores extremos.
-
----
-
-# 3. Análise de Domínio (Inferência Causal)
-
-## Relação estudada
-
-**Radiação Solar (GHI) × Energia Gerada**
-
-### Correlação não implica causalidade
-
-Embora exista uma forte correlação entre a radiação solar (GHI) e a energia produzida, essa relação estatística não é suficiente para comprovar causalidade.
-
-A correlação apenas indica que ambas variáveis variam conjuntamente, sem demonstrar o mecanismo físico responsável pela geração de energia.
-
----
-
-## Variáveis de Confusão
-
-### Temperatura
-
-Dias com alta radiação solar geralmente apresentam temperaturas elevadas.
-
-Entretanto, temperaturas excessivas reduzem a eficiência das células fotovoltaicas, interferindo diretamente na produção de energia.
-
-### Sujidade dos Painéis
-
-O acúmulo de poeira ou falta de manutenção reduz a quantidade de luz absorvida pelos painéis solares.
-
-Assim, mesmo com elevada radiação solar, a geração de energia pode ser inferior ao esperado.
-
----
-
-## Cenário *Ceteris Paribus*
-
-Para demonstrar uma relação causal entre radiação solar e geração de energia seria necessário um experimento controlado, utilizando:
-
-* Dois painéis solares idênticos;
-* Mesma temperatura;
-* Mesmo nível de limpeza;
-* Mesmas condições ambientais.
-
-Nesse cenário, apenas a intensidade da radiação seria alterada, permitindo isolar seu efeito sobre a produção de energia.
-
----
-
-# 📊 Parte 2 - Inferência Estatística e Teste A/B
-
-## 4. Unidade de Análise
-
-A base tratada pelo pipeline atual possui **186.625 registros**. Para a análise inferencial, as medições de 15 em 15 minutos foram agrupadas por dia, considerando somente os períodos em que `isSun = 1`. A base analítica resultante possui **2.005 dias**, entre 01/01/2017 e 31/08/2022.
-
-Essa agregação foi escolhida para reduzir a dependência entre observações consecutivas. Se cada medição de 15 minutos fosse tratada como independente, o tamanho efetivo da amostra seria artificialmente inflado e os intervalos poderiam parecer mais precisos do que realmente são.
-
-A variável central é `energia_media`, definida como a média de `Energy delta[Wh]` durante as horas de sol em cada dia. Também foram calculadas as médias diárias de radiação, temperatura, umidade, nebulosidade, vento, chuva e neve, formando uma interface única para os demais modelos.
-
-## 5. Estimação da Média e Bootstrap
-
-Foram obtidas as seguintes estatísticas para `energia_media`:
-
-| Medida | Resultado |
+| Estatística | Valor |
 |---|---:|
-| Tamanho da amostra (N) | 2.005 dias |
-| Média amostral | 1.007,27 Wh |
+| N | 2.005 dias |
+| Média | 1.007,27 Wh |
 | Desvio padrão amostral | 658,75 Wh |
 | Erro padrão | 14,71 Wh |
-| Assimetria amostral | 0,124 |
+| Assimetria | 0,124 |
+| IC 95% Bootstrap | [978,41; 1.035,74] Wh |
+| IC 95% normal | [978,44; 1.036,11] Wh |
 
-O Bootstrap foi executado com **5.000 réplicas**, reamostragem com reposição e semente aleatória 42. Em cada réplica foram sorteados 2.005 dias e calculada uma nova média. O intervalo não paramétrico corresponde aos percentis 2,5% e 97,5% dessas médias.
+N grande e assimetria pequena favorecem a aproximação normal da distribuição
+da média; os ICs quase coincidem. Entretanto, o TCL exige condições de
+independência ou dependência suficientemente fraca, não verificadas pela simples
+agregação. Os ICs são aproximações exploratórias sob reamostragem de dias
+independentes. Bootstrap em blocos seria uma extensão para dependência temporal.
+Coincidência dos ICs não demonstra independência. IC 95% refere-se à cobertura
+do procedimento em amostragens repetidas, não a conter 95% das energias diárias.
 
-| Método do IC de 95% | Limite inferior | Limite superior |
+![Distribuição Bootstrap](distribuicao_bootstrap.png)
+
+## 5. Teste A/B observacional por permutação
+
+Grupo A: `nuvens_media <= 30`; grupo B: `nuvens_media >= 70`.
+Sem sobreposição; **607 dias intermediários** excluídos.
+H₀: μA = μB; H₁: μA ≠ μB; bicaudal; **α = 0,05**.
+
+| Medida | Claros (A) | Nublados (B) |
 |---|---:|---:|
-| Bootstrap percentil | 978,41 Wh | 1.035,74 Wh |
-| Aproximação normal | 978,44 Wh | 1.036,11 Wh |
+| Dias | 276 | 1.122 |
+| Média | 1.751,20 Wh | 639,19 Wh |
 
-Os intervalos são praticamente coincidentes. A diferença pequena entre os limites indica que, para esta amostra, a distribuição Bootstrap da média se aproxima bem da distribuição normal prevista pelo Teorema Central do Limite.
+A diferença A−B é **1.112,01 Wh**. Em **5.000 permutações**, embaralhamos
+rótulos preservando tamanhos dos grupos. Com semente 42, nenhuma diferença
+simulada foi tão extrema em módulo quanto a observada. A correção de Monte
+Carlo dá `p = (0 + 1)/(5000 + 1) = 0,000200`, não zero. Rejeitamos H₀ sob as
+hipóteses do procedimento.
 
-### Aplicação do Teorema Central do Limite
+A validade exata da permutação exige intercambiabilidade dos rótulos sob a
+nula, condição mais forte que apenas igualdade de médias. Grupos naturais,
+heterogeneidade e dependência temporal limitam a interpretação. Não houve
+randomização: é um contraste **observacional**, não experimento causal.
+A diferença apoia planejamento conservador em dias nublados, mas não estima
+o efeito isolado de alterar a nebulosidade.
 
-As condições do TCL são razoáveis porque a amostra possui 2.005 unidades diárias e a assimetria observada, 0,124, é baixa. Além disso, o agrupamento diário reduz a forte dependência existente entre medições vizinhas de 15 minutos.
+![Distribuição de permutação](distribuicao_permutacao.png)
 
-Entretanto, a independência não é perfeita: dias consecutivos podem compartilhar o mesmo regime meteorológico, há sazonalidade ao longo dos anos e alguns dias possuem menos medições solares que outros. O dataset também não constitui uma amostra aleatória de todas as usinas solares. Portanto, os intervalos descrevem com maior segurança o contexto representado pela base, e não todas as instalações fotovoltaicas possíveis.
+## 6. Regressão linear múltipla
 
-## 6. Teste A/B por Permutação
+Y = `energia_media`; X = GHI, temperatura, umidade, nuvens e vento médios.
+Treino: **1.778 dias de 2017–2021**; teste: **227 dias de 2022**.
+`LinearRegression` inclui intercepto.
 
-O objetivo foi verificar se a média diária de energia difere entre dois cenários meteorológicos mutuamente exclusivos:
+| Termo | Estimativa |
+|---|---:|
+| Intercepto | 940,4537 |
+| GHI | 15,6710 |
+| Temperatura | −16,2446 |
+| Umidade | −3,6616 |
+| Nuvens | −4,3524 |
+| Vento | −10,7422 |
 
-* **Grupo A - dias claros:** `nuvens_media <= 30%`;
-* **Grupo B - dias nublados:** `nuvens_media >= 70%`.
+Mantendo os outros X constantes (*ceteris paribus*), uma unidade de GHI
+associa-se a +15,67 Wh na resposta; uma unidade de temperatura a −16,24 Wh;
+um ponto percentual de umidade a −3,66 Wh; um ponto percentual de nuvens a
+−4,35 Wh; uma unidade original de vento a −10,74 Wh. São associações
+condicionais, não efeitos causais. O intercepto é a previsão com todos os X
+iguais a zero, cenário possivelmente fora do domínio observado.
 
-As hipóteses formais do teste bicaudal foram:
+No teste: **R² = 0,7082; RMSE = 328,17 Wh**. R² resume a redução do erro
+quadrático frente à média do próprio teste, não porcentagem de previsões
+corretas. O RMSE tem a unidade do alvo. Preditores correlacionados e fatores
+omitidos limitam a interpretação dos coeficientes.
 
-* **H₀:** μ<sub>claros</sub> = μ<sub>nublados</sub>;
-* **H₁:** μ<sub>claros</sub> ≠ μ<sub>nublados</sub>;
-* **Nível de significância:** α = 0,05.
+## 7. Classificação: Logística × KNN
 
-| Resultado | Dias claros | Dias nublados |
+`alta_geracao = 1` quando a energia supera a mediana **apenas do treino**;
+caso contrário, classe 0. O limiar é **990,8153 Wh** (precisão completa no JSON).
+Usam-se os mesmos cinco X e o mesmo teste de 2022 da regressão.
+
+Os dois modelos têm `StandardScaler` dentro de `Pipeline`: a escala é
+ajustada apenas na parcela de treino de cada dobra. `GridSearchCV` maximiza
+F1 em cinco dobras de `StratifiedKFold(shuffle=True, random_state=42)` no treino.
+
+- Logística: C ∈ {0,1; 1; 10}; class_weight ∈ {None, balanced}; max_iter=2000.
+- KNN: vizinhos ∈ {3, 5, 7, 11, 15}; weights ∈ {uniform, distance}; p ∈ {1, 2}.
+
+Melhores: **Logística C=10, class_weight=None**;
+**KNN n_neighbors=15, weights=uniform, p=1 (Manhattan)**.
+
+| Métrica no teste | Logística | KNN |
 |---|---:|---:|
-| Quantidade de dias | 276 | 1.122 |
-| Média de energia | 1.751,20 Wh | 639,19 Wh |
+| Acurácia | 93,83% | 90,75% |
+| Precisão (classe 1) | 92,76% | 89,68% |
+| Recall (classe 1) | 97,92% | 96,53% |
+| F1 (classe 1) | 95,27% | 92,98% |
+| Matriz: [[TN, FP], [FN, TP]] | [[72, 11], [3, 141]] | [[67, 16], [5, 139]] |
 
-A estatística observada foi `média_claros - média_nublados = 1.112,01 Wh`. Para construir a distribuição esperada sob H₀, os rótulos dos 1.398 dias selecionados foram embaralhados **5.000 vezes**, preservando os tamanhos originais dos grupos. O valor-p bicaudal foi calculado pela proporção corrigida de permutações em que `|diferença simulada| >= |diferença observada|`.
+Linhas são classes reais; colunas, previstas; ordem [0, 1]. O teste contém
+83 dias de classe 0 e 144 de classe 1. A Logística foi superior nas quatro
+métricas desta avaliação, sem garantia de superioridade em novos anos/locais.
+Falsos positivos podem superestimar energia disponível; falsos negativos
+podem tornar o planejamento excessivamente conservador.
 
-O resultado foi **p = 0,000200**. Como `p < 0,05`, a decisão formal é **rejeitar H₀**. Os dados fornecem evidência estatística de diferença entre a geração média dos dias claros e nublados no conjunto analisado.
+### Limites da avaliação supervisionada
 
-Na prática, o resultado indica que a previsão de nebulosidade pode apoiar o planejamento operacional: dias claros apresentam maior potencial de geração e dias muito nublados exigem previsões mais conservadoras ou fontes complementares. Isso não prova que a nebulosidade isoladamente causou toda a diferença, pois GHI, estação do ano, temperatura, duração do dia, chuva e condição dos painéis podem atuar como confundidores ou mediadores.
+O teste não ajusta modelos, escala, hiperparâmetros ou mediana do alvo.
+**Isso não elimina todo vazamento**: o ETL da AVP1 calcula medianas e limites
+IQR na série completa antes da divisão, inclusive com informações de 2022,
+e filtra o alvo. As dobras internas também misturam datas de 2017–2021.
+As métricas são exploratórias na base tratada, não validação temporal
+rigorosamente isolada. Para produção, ajustar o ETL só no passado, preservar
+o teste e usar validação temporal em janelas.
 
-## 7. Reprodutibilidade da Inferência
+Os preditores meteorológicos são observados no próprio dia. Prever amanhã
+exigiria previsões meteorológicas disponíveis antes da decisão e nova
+avaliação incluindo seus erros; esse cenário não foi testado.
 
-As duas simulações usam `random_state=42`, tornando os resultados reproduzíveis. O comando `python main.py` reconstrói o CSV canônico na raiz, prepara a base diária, executa os 5.000 ciclos de cada procedimento, exibe todos os resultados no terminal e gera:
+## 8. PCA e fundamentação por SVD
 
-* `distribuicao_bootstrap.png` - histograma das médias Bootstrap, com os dois ICs de 95%;
-* `distribuicao_permutacao.png` - distribuição sob H₀, com `±|diferença observada|`.
+Padronizamos seis colunas: energia, GHI, temperatura, umidade, nuvens e vento,
+evitando domínio das variáveis de maior escala. PCA/K-Means usam todos os
+2.005 dias nesta análise descritiva, sem alegação de desempenho preditivo.
 
-Os módulos de regressão, classificação e aprendizado não supervisionado seguem uma interface comum. Assim que os arquivos dos demais integrantes forem adicionados em `src/models/`, o orquestrador passará a executá-los automaticamente.
+Para Z padronizada e centrada, a SVD escreve `Z = U Σ Vᵀ`. As direções
+principais são vetores de V; escores são `Z V = U Σ`; variâncias são
+proporcionais aos quadrados dos valores singulares. As duas primeiras
+componentes retêm a maior variância entre projeções lineares ortogonais 2D.
+O código usa `PCA(n_components=2, svd_solver='full')`.
 
----
+**PC1 = 59,99%; PC2 = 16,37%; acumulada = 76,36%.** Cerca de 23,64% fica fora
+da projeção: proximidade em 2D não garante identidade no espaço original.
 
-# ⚙️ Como Executar o Projeto
+![Projeção PCA](pca_projecao.png)
 
-## 1. Instalação
+## 9. K-Means, cotovelo e perfis
 
-Clone o repositório:
+O K-Means minimiza distâncias quadráticas aos centroides nas **seis dimensões
+padronizadas**, não só no PCA. Usa semente 42 e `n_init=20`. Inércia para
+k=1…10; silhouette para k=2…10 (não definida para um único grupo).
 
-```bash
-git clone https://github.com/guilhermealves05/meu-projeto-data-science.git
-cd meu-projeto-data-science
-```
+| k | Inércia aproximada | Silhouette |
+|---|---:|---:|
+| 1 | 12.030,00 | não aplicável |
+| 2 | 6.607,36 | 0,3764 |
+| 3 | 5.559,21 | 0,2582 |
+| 4 | 4.827,61 | 0,2348 |
+| 5 | 4.239,79 | 0,2466 |
+| 6 | 3.891,86 | 0,2396 |
+| 7 | 3.564,53 | 0,2275 |
+| 8 | 3.343,05 | 0,2259 |
+| 9 | 3.168,26 | 0,2200 |
+| 10 | 3.039,16 | 0,2192 |
 
-Instale as dependências:
+Escolhemos **k=2**: a inércia cai 45,08% de 1 para 2, contra 15,86% de 2
+para 3, com ganhos menores depois. Dois regimes privilegiam parcimônia e
+coincidem com a maior silhouette. A curva não demonstra um cotovelo único
+indiscutível; k=3 ou 4 daria perfis mais detalhados. A escolha documentada pela
+inspeção da curva e apoiada por silhouette fica explícita no código.
+Silhouette 0,3764 indica separação moderada, não perfeita.
 
-```bash
-pip install -r requirements.txt
-```
+![Cotovelo e silhouette](curva_cotovelo_kmeans.png)
 
----
+| Cluster | Energia (Wh) | GHI¹ | Temperatura¹ | Umidade (%) | Nuvens (%) | Vento¹ |
+|---|---:|---:|---:|---:|---:|---:|
+| 0 | 492,75 | 27,24 | 6,68 | 85,05 | 85,53 | 4,57 |
+| 1 | 1.551,91 | 85,51 | 15,46 | 66,64 | 48,99 | 3,66 |
 
-## 2. Configuração do Dataset
+¹ Unidades originais das colunas, sem conversão; GHI e vento não têm unidade
+confirmada. Perfis são centroides na escala original. Cluster 0: menor
+radiação/energia e mais umidade/nuvens; cluster 1: maior radiação/energia e
+menos umidade/nuvens. Os rótulos 0 e 1 são arbitrários.
 
-Por questões de tamanho do arquivo, o dataset original não é armazenado no repositório.
+![Clusters no PCA](clusters_kmeans.png)
 
-Crie a seguinte estrutura:
+## 10. Correlação, causalidade e decisão operacional
 
-```
-Projeto/
-│
-├── dados_brutos/
-│   └── Renewable.csv
-│
-├── main.py
-├── requirements.txt
-└── README.md
-```
+Correlação é co-variação; previsão estima uma resposta usando entradas;
+causalidade descreve efeito de intervenção. O mecanismo físico solar não
+torna estes coeficientes observacionais provas causais.
 
-Baixe o dataset:
+Estação do ano e geometria solar afetam radiação, duração do dia e geração;
+temperatura e condições dos painéis alteram rendimento. Sujidade, manutenção
+e equipamentos são fatores omitidos plausíveis, não confundidores comprovados
+só por serem plausíveis. GHI pode mediar a relação nuvens → energia;
+ajustar um mediador muda a pergunta causal. Um experimento controlaria painéis,
+temperatura e limpeza e variaria a exposição com randomização e segurança.
 
-**Renewable Power Generation and Weather Conditions**
+Propomos avaliar janelas de manutenção **eletiva** de menor geração esperada,
+combinando previsões meteorológicas externas, perfis históricos e estimativas
+supervisionadas após validação prospectiva. O cluster inclui energia observada:
+não é possível atribuir o cluster de amanhã usando energia futura desconhecida.
+Os perfis descrevem regimes passados; não são previsões prontas.
 
-Renomeie o arquivo para:
+Não inferimos chuva só por nuvens: chuva não entrou no agrupamento. Segurança,
+disponibilidade técnica e reparos urgentes prevalecem. Diferenças entre energia
+observada e esperada podem motivar inspeção, mas não diagnosticam sozinhas
+sujeira ou falha. Redução efetiva de perdas exigiria acompanhamento prospectivo,
+não realizado nesta entrega.
 
-```
-Renewable.csv
-```
+## 11. Organização e entrega
 
-e coloque-o dentro da pasta:
+- `main.py`: execução integrada; `src/relatorio.py`: exportação de métricas.
+- `src/extract/`, `src/transform/`, `src/visualize.py`: AVP1.
+- `src/analysis_utils.py`: base diária; `src/inference/`: Bootstrap e permutação.
+- `src/models/`: regressão, classificação e não supervisionado.
+- `docs/`: textos das contribuições; `tests/`: testes automatizados.
+- `verificar_entrega.py`: conferência de artefatos e resultados.
 
-```
-dados_brutos/
-```
+Antes de entregar: rodar pipeline, testes e verificador; conferir cinco PNGs,
+README e métricas na branch `main` do GitHub; enviar o link e demais arquivos
+exigidos na plataforma da disciplina até **01/09/2026**. Atualizar o GitHub
+não efetua automaticamente a submissão acadêmica.
 
----
-
-## 3. Execução
-
-Execute o pipeline utilizando:
-
-```bash
-python main.py
-```
-
-O processo realizará automaticamente:
-
-* Extração dos dados;
-* Tratamento de valores ausentes;
-* Remoção de outliers utilizando IQR;
-* Limpeza da base;
-* Geração das visualizações exploratórias;
-* Construção da base analítica diária;
-* Bootstrap com dois intervalos de confiança;
-* Teste A/B por permutação.
-
----
-
-# 📊 Arquivos Gerados
-
-Ao término da execução serão criados automaticamente:
-
-```
-dados_limpos_final.csv
-```
-
-Base de dados tratada e pronta para futuras análises.
-
-```
-distribuicao_bootstrap.png
-distribuicao_permutacao.png
-```
-
-Gráficos inferenciais obrigatórios da Parte 2, gerados na raiz do projeto.
-
-```
-grafico_1_ciclo_diario.png
-```
-
-Análise do comportamento diário da geração de energia.
-
-```
-grafico_2_historico_mensal.png
-```
-
-Evolução mensal da geração ao longo dos anos.
-
-```
-grafico_3_dispersao_radiacao.png
-```
-
-Gráfico de dispersão entre radiação solar e energia gerada.
-
----
-
-# 📂 Estrutura do Projeto
-
-```
-Projeto/
-│
-├── dados_brutos/
-│   └── Renewable.csv
-│
-├── dados_limpos_final.csv
-├── grafico_1_ciclo_diario.png
-├── grafico_2_historico_mensal.png
-├── grafico_3_dispersao_radiacao.png
-├── distribuicao_bootstrap.png
-├── distribuicao_permutacao.png
-│
-├── main.py
-├── requirements.txt
-├── README.md
-└── src/
-    ├── analysis_utils.py
-    ├── inference/
-    │   ├── bootstrap.py
-    │   └── ab_testing.py
-    ├── extract/extractor.py
-    ├── transform/cleaner.py
-    └── visualize.py
-```
-
----
-
-# 🛠️ Tecnologias Utilizadas
-
-* Python
-* Pandas
-* NumPy
-* Matplotlib
-
----
-
-# 🎯 Objetivo
-
-Construir um pipeline completo de Ciência de Dados capaz de:
-
-* Realizar ingestão dos dados;
-* Efetuar limpeza e tratamento estatístico;
-* Identificar e tratar valores extremos;
-* Produzir análises exploratórias;
-* Gerar visualizações para apoio à tomada de decisão no contexto de geração de energia renovável.
-
----
-
-# 📄 Licença
-
-Projeto desenvolvido exclusivamente para fins acadêmicos na disciplina de **Ciência de Dados**.
+Valores correspondem à base canônica no ambiente de referência. Dependências
+transitivas/plataforma podem produzir pequenas diferenças numéricas; versões
+principais são registradas no JSON. As limitações integram a análise; não se
+alega validação de produção. Finalidade acadêmica não implica autorização
+automática de redistribuição do dataset nem uma licença não informada.
