@@ -1,6 +1,8 @@
 # Cache do Python
 __pycache__/
 *.pyc
+.venv/
+*.patch
 
 # Arquivos locais que não devem ir para o GitHub
 outputs/

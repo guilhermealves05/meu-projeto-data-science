@@ -1,7 +1,7 @@
 # Parte 2 - Modelagem Supervisionada
 **Responsável:** Guilherme Monteiro
 
-Este documento apresenta os resultados reais das execuções do pipeline de modelagem supervisionada (Regressão Linear Múltipla e Classificação Binária) aplicados à base diária da AVP2. Os modelos foram treinados com dados de 2017 a 2021 e validados com dados do ano de 2022 para evitar vazamento temporal.
+Este documento apresenta resultados da modelagem supervisionada na base diária. Os modelos foram treinados em 2017–2021 e avaliados no teste de 2022. Escala, hiperparâmetros e mediana do alvo são ajustados apenas no treino. Isso não elimina todo vazamento: o ETL da AVP1 usa medianas e limites IQR da série completa, e as dobras internas misturam datas do treino. A avaliação é exploratória; uma validação rigorosa deve ajustar também o ETL só no passado e usar dobras temporais. Veja o README consolidado.
 
 ---
 

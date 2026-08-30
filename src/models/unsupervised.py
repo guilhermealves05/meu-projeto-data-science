@@ -4,8 +4,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
+from pathlib import Path
 
-def executar_nao_supervisionado(df_diario):
+def executar_nao_supervisionado(df_diario, diretorio_saida=None):
+    diretorio_saida = (Path(diretorio_saida) if diretorio_saida is not None
+                       else Path(__file__).resolve().parents[2])
+    diretorio_saida.mkdir(parents=True, exist_ok=True)
     print("\n--- Iniciando Análise Não Supervisionada (Paulo Cosmo) ---")
     
     
@@ -20,7 +24,7 @@ def executar_nao_supervisionado(df_diario):
     dados_padronizados = scaler.fit_transform(df_selecionado)
 
    
-    pca = PCA(n_components=2)
+    pca = PCA(n_components=2, svd_solver='full')
     pca_componentes = pca.fit_transform(dados_padronizados)
 
    
@@ -44,7 +48,8 @@ def executar_nao_supervisionado(df_diario):
     plt.ylabel(f'Componente Principal 2 (PC2) - {var_pc2*100:.1f}%')
     plt.title('Projeção PCA - Energia e Variáveis Climáticas')
     plt.grid(True)
-    plt.savefig('pca_projecao.png')
+    plt.tight_layout()
+    plt.savefig(diretorio_saida / 'pca_projecao.png', dpi=200)
     plt.close()
     print("Gráfico 'pca_projecao.png' gerado com sucesso!")
 
@@ -62,6 +67,10 @@ def executar_nao_supervisionado(df_diario):
     
     resultados['inercias'] = inercias
     resultados['silhouettes'] = silhouettes
+    resultados['k_avaliados'] = list(K_range)
+    inercia_k1 = KMeans(n_clusters=1, random_state=42, n_init=20).fit(
+        dados_padronizados).inertia_
+    resultados['inercia_k1'] = inercia_k1
 
     
     fig, ax1 = plt.subplots(figsize=(8, 6))
@@ -69,9 +78,10 @@ def executar_nao_supervisionado(df_diario):
     color = 'tab:red'
     ax1.set_xlabel('Número de Clusters (k)')
     ax1.set_ylabel('Inércia', color=color)
-    ax1.plot(K_range, inercias, marker='o', color=color)
+    ax1.plot(range(1, 11), [inercia_k1] + inercias, marker='o', color=color)
     ax1.tick_params(axis='y', labelcolor=color)
-    ax1.set_xticks(K_range)
+    ax1.set_xticks(range(1, 11))
+    ax1.axvline(2, color='gray', linestyle='--', alpha=0.6)
 
     ax2 = ax1.twinx()  
     color = 'tab:blue'
@@ -81,13 +91,18 @@ def executar_nao_supervisionado(df_diario):
 
     plt.title('Método do Cotovelo e Silhouette Score')
     fig.tight_layout()  
-    plt.savefig('curva_cotovelo_kmeans.png')
+    plt.savefig(diretorio_saida / 'curva_cotovelo_kmeans.png', dpi=200)
     plt.close()
     print("Gráfico 'curva_cotovelo_kmeans.png' gerado com sucesso!")
 
     
-    k_escolhido = K_range[silhouettes.index(max(silhouettes))]
-    print(f"\nO K escolhido justificado pelo maior Silhouette Score foi: {k_escolhido}")
+    # Escolha desta análise, documentada no README: forte queda de 1 para 2,
+    # ganhos menores depois, parcimônia e confirmação pela silhouette.
+    # O cotovelo é uma inspeção visual, não uma prova de ótimo único.
+    k_escolhido = 2
+    resultados['k_melhor_silhouette'] = K_range[silhouettes.index(max(silhouettes))]
+    print(f"\nK escolhido pela análise do cotovelo e parcimônia: {k_escolhido}")
+    print(f"Melhor k por silhouette: {resultados['k_melhor_silhouette']}")
     
     kmeans_final = KMeans(n_clusters=k_escolhido, random_state=42, n_init=20)
     labels = kmeans_final.fit_predict(dados_padronizados)
@@ -98,12 +113,16 @@ def executar_nao_supervisionado(df_diario):
 
     
     plt.figure(figsize=(8, 6))
-    scatter = plt.scatter(pca_componentes[:, 0], pca_componentes[:, 1], c=labels, cmap='viridis', alpha=0.6)
+    for cluster, cor in enumerate(['#6d28d9', '#059669']):
+        mascara = labels == cluster
+        plt.scatter(pca_componentes[mascara, 0], pca_componentes[mascara, 1],
+                    color=cor, alpha=0.6, s=20, label=f'Cluster {cluster}')
     plt.xlabel('Componente Principal 1 (PC1)')
     plt.ylabel('Componente Principal 2 (PC2)')
     plt.title(f'Clusters K-Means (k={k_escolhido}) Projetados no PCA')
-    plt.colorbar(scatter, label='Cluster')
-    plt.savefig('clusters_kmeans.png')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(diretorio_saida / 'clusters_kmeans.png', dpi=200)
     plt.close()
     print("Gráfico 'clusters_kmeans.png' gerado com sucesso!")
 
@@ -115,8 +134,9 @@ def executar_nao_supervisionado(df_diario):
     perfis_df = pd.DataFrame(centroides_originais, columns=colunas_selecionadas)
     perfis_df.index.name = 'Cluster'
     resultados['perfis_clusters'] = perfis_df
+    resultados['tamanhos_clusters'] = pd.Series(labels).value_counts().sort_index().to_dict()
     
     print("\nPerfil dos clusters (médias nas unidades originais):")
-    print(perfis_df)
+    print(perfis_df.to_string())
     
     return resultados

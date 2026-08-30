@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import logging
 from pathlib import Path
 
@@ -10,6 +9,10 @@ from src.analysis_utils import preparar_base_diaria
 from src.extract.extractor import realizar_ingestao
 from src.inference.ab_testing import executar_teste_permutacao
 from src.inference.bootstrap import executar_bootstrap
+from src.models.regression import executar_regressao
+from src.models.machine_learning import comparar_classificadores
+from src.models.unsupervised import executar_nao_supervisionado
+from src.relatorio import salvar_resultados
 from src.transform.cleaner import realizar_transformacao
 from src.visualize import gerar_visualizacao
 
@@ -28,36 +31,21 @@ logging.basicConfig(
 
 
 def _executar_modulos_da_equipe(df_diario) -> dict:
-    """Executa automaticamente os módulos dos colegas quando estiverem presentes.
-
-    As interfaces seguem o contrato combinado no plano da equipe. Enquanto uma
-    parte ainda não foi integrada, o pipeline informa a pendência sem impedir a
-    execução da inferência estatística já concluída.
-    """
-    contratos = [
-        ("src.models.regression", "executar_regressao", "regressão"),
-        ("src.models.machine_learning", "comparar_classificadores", "classificação"),
-        ("src.models.unsupervised", "executar_nao_supervisionado", "PCA e K-Means"),
-    ]
-    resultados = {}
-    for modulo_nome, funcao_nome, rotulo in contratos:
-        try:
-            modulo = importlib.import_module(modulo_nome)
-        except ModuleNotFoundError as erro:
-            modulo_ausente = erro.name == modulo_nome or modulo_nome.startswith(
-                f"{erro.name}."
-            )
-            if modulo_ausente:
-                logging.info("Módulo de %s ainda não integrado; etapa ignorada.", rotulo)
-                continue
-            raise
-
-        funcao = getattr(modulo, funcao_nome, None)
-        if funcao is None:
-            raise AttributeError(f"{modulo_nome} precisa expor a função {funcao_nome}().")
-        logging.info("Executando módulo de %s...", rotulo)
-        resultados[rotulo] = funcao(df_diario)
-    return resultados
+    """Na entrega final todas as etapas são obrigatórias, sem saltos silenciosos."""
+    regressao = executar_regressao(df_diario)
+    logging.info("Regressão | R²=%.4f | RMSE=%.2f Wh | intercepto=%.2f",
+                 regressao['r2'], regressao['rmse'], regressao['intercepto'])
+    logging.info("Coeficientes: %s", regressao['coeficientes'])
+    classificacao = comparar_classificadores(df_diario)
+    for nome, metricas in classificacao.items():
+        logging.info("%s | acurácia=%.4f | precisão=%.4f | recall=%.4f | F1=%.4f",
+                     nome, metricas['acuracia'], metricas['precisao'],
+                     metricas['recall'], metricas['f1'])
+        logging.info("%s | matriz=%s | parâmetros=%s", nome,
+                     metricas['matriz_confusao'], metricas['melhores_parametros'])
+    nao_supervisionado = executar_nao_supervisionado(df_diario, RAIZ_PROJETO)
+    return {'regressão': regressao, 'classificação': classificacao,
+            'PCA e K-Means': nao_supervisionado}
 
 
 def _registrar_resultados_inferencia(bootstrap: dict, teste_ab: dict) -> None:
@@ -101,7 +89,7 @@ def main() -> dict:
     logging.info("Base limpa salva em: %s", CAMINHO_DADOS_LIMPOS)
 
     logging.info("Etapa 3/5 - Visualizações exploratórias da Parte 1")
-    gerar_visualizacao(df_limpo)
+    gerar_visualizacao(df_limpo, RAIZ_PROJETO / 'outputs')
 
     logging.info("Etapa 4/5 - Base diária e inferência estatística")
     df_diario = preparar_base_diaria(df_limpo)
@@ -128,6 +116,15 @@ def main() -> dict:
 
     logging.info("Etapa 5/5 - Módulos analíticos da equipe")
     resultados_equipe = _executar_modulos_da_equipe(df_diario)
+
+    salvar_resultados(df_bruto, df_limpo, df_diario, resultado_bootstrap,
+                      resultado_ab, resultados_equipe, RAIZ_PROJETO)
+    graficos = ['distribuicao_bootstrap.png', 'distribuicao_permutacao.png',
+                'pca_projecao.png', 'curva_cotovelo_kmeans.png', 'clusters_kmeans.png']
+    for nome in graficos:
+        if not (RAIZ_PROJETO / nome).is_file():
+            raise FileNotFoundError(f'Gráfico obrigatório ausente: {nome}')
+    logging.info('Resultados completos: %s', RAIZ_PROJETO / 'resultados_avp2.json')
 
     logging.info("Gráfico Bootstrap: %s", CAMINHO_BOOTSTRAP)
     logging.info("Gráfico de permutação: %s", CAMINHO_PERMUTACAO)

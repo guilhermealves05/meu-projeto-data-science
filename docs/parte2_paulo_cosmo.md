@@ -1,38 +1,47 @@
-# Modelagem Não Supervisionada e Análise de Causalidade
-Responsável: Paulo Cosmo
+# Modelagem não supervisionada e discussão causal
 
-## 1. Redução de Dimensionalidade (PCA)
-Para compreender melhor a relação entre a geração de energia e as múltiplas variáveis climáticas (GHI, temperatura, umidade, nuvens e vento), aplicamos a Análise de Componentes Principais (PCA) após a padronização dos dados. 
-* O Componente Principal 1 (PC1) explicou [X]% da variância dos dados.
-* O Componente Principal 2 (PC2) explicou [X]% da variância.
-* A Variância Acumulada preservada pelas duas novas dimensões foi de [X]%.
+Responsável pela contribuição: Paulo Cosmo. Resultados preenchidos e texto
+consolidado na integração final, a partir da execução na base de 2.005 dias.
 
-A projeção bidimensional pode ser visualizada no arquivo pca_projecao.png, onde os dias com perfis meteorológicos semelhantes aparecem mais próximos uns dos outros.
+## PCA
 
-## 2. Agrupamento (K-Means)
-Para identificar regimes climáticos diários consistentes, testamos diferentes números de clusters (K de 2 a 10). 
-* A escolha do melhor K foi fundamentada pelo método do cotovelo (inércia) e apoiada pelo Silhouette Score. O valor escolhido foi K = [X], pois apresentou a melhor separação entre os grupos, conforme demonstrado no gráfico curva_cotovelo_kmeans.png.
+Seis variáveis padronizadas: energia, GHI, temperatura, umidade, nuvens e vento.
+PC1 explica **59,99%**, PC2 **16,37%**, acumulando **76,36%** da variância.
+Na SVD `Z = U Σ Vᵀ`, V define as direções principais; as duas primeiras
+maximizam variância preservada em 2D. Perdem-se 23,64% da variância.
+Figura: `pca_projecao.png` na raiz.
 
-Abaixo, os perfis médios de cada cluster em suas unidades originais:
+## K-Means
 
-| Cluster | Energia Média (Wh) | GHI Médio | Temp Média (°C) | Umidade Média (%) | Nuvens Médio | Vento Médio (km/h) |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| 0 | [X] | [X] | [X] | [X] | [X] | [X] |
-| 1 | [X] | [X] | [X] | [X] | [X] | [X] |
+Agrupamento nas seis variáveis padronizadas; semente 42 e n_init=20.
+Inércia para k=1…10; silhouette para k=2…10. A curva cai de 12.030 para
+6.607,36 de k=1 a 2 (45,08%); de 2 a 3 cai 15,86%. Adotamos **k=2** pela
+inspeção do cotovelo, parcimônia e silhouette máxima de **0,3764**. O cotovelo
+é gradual e não prova um ótimo único. Veja a discussão completa no README.
+Figuras: `curva_cotovelo_kmeans.png` e `clusters_kmeans.png`, na raiz.
 
-O gráfico clusters_kmeans.png ilustra como esses grupos se separam no espaço de duas dimensões criado pelo PCA.
+| Cluster | Energia (Wh) | GHI | Temperatura | Umidade (%) | Nuvens (%) | Vento |
+|---|---:|---:|---:|---:|---:|---:|
+| 0 | 492,75 | 27,24 | 6,68 | 85,05 | 85,53 | 4,57 |
+| 1 | 1.551,91 | 85,51 | 15,46 | 66,64 | 48,99 | 3,66 |
 
-## 3. Discussão: Causalidade vs. Correlação
-É fundamental separar correlação (variáveis que variam juntas) de causalidade (uma variável provocando o comportamento da outra) e previsão (uso de dados passados para estimar o futuro). Embora exista uma forte correlação entre alta irradiação solar (GHI) e aumento da energia gerada, não podemos afirmar uma relação puramente causal e isolada sem considerar as variáveis de confusão (confundidores).
+São unidades originais, sem conversão não documentada; GHI e vento não têm
+unidade confirmada. Energia é média dos intervalos solares, não total diário.
+Cluster 0: menor energia/radiação e mais nuvens/umidade; cluster 1: maior
+energia/radiação e menos nuvens/umidade. Rótulos são arbitrários.
 
-### 3.1 Possíveis Confundidores
-No contexto de energia solar, diversos fatores mascaram as relações diretas, tais como:
-* Temperatura: Dias com altíssima irradiação frequentemente apresentam altas temperaturas, que aquecem os painéis solares e diminuem sua eficiência, criando um efeito de confusão (mais sol, mas menor rendimento relativo).
-* Sujidade e Manutenção: O acúmulo de poeira nos painéis ou paradas programadas para manutenção reduzem a geração de energia abruptamente, independentemente do cenário climático.
-* Fatores Sazonais: Estações do ano e variação da duração do dia afetam o total diário, além da ocorrência de chuvas.
+## Causalidade e operação
 
-### 3.2 Decisão Operacional
-Com base nos regimes climáticos (clusters) identificados, e compreendendo as limitações causais, propõe-se a seguinte decisão operacional focada em manutenção preditiva:
-* A equipe de operação deve agendar manutenções e limpezas profundas dos painéis (sujidade) preferencialmente durante os dias pertencentes ao regime/cluster com menor perfil de geração e maior cobertura de nuvens/chuva. Dessa forma, a perda produtiva pela parada dos equipamentos será minimizada, aproveitando os dias onde o potencial natural já estaria comprometido pelo clima.
+Associação, previsão e causalidade são distintas. Sazonalidade e temperatura
+podem afetar radiação/produção; sujidade, manutenção e equipamentos são fatores
+omitidos plausíveis. Não houve intervenção que isole efeitos. GHI pode mediar
+parte da relação nuvens–energia.
 
-*(Nota: Esta decisão operacional assume que as manutenções podem ser flexibilizadas de acordo com previsões climáticas de curto prazo e é limitada pela incapacidade de isolar perfeitamente a queda de geração provocada por sujeira daquela provocada pelo clima, reforçando a importância do monitoramento in loco).*
+Os perfis sugerem investigar manutenção eletiva em janelas de menor geração
+esperada, com previsões meteorológicas e avaliação prospectiva. Energia
+observada integra os clusters: eles não são previsões prontas do futuro.
+Chuva não entrou nos atributos; não se pode chamá-los de chuvosos só pelas
+nuvens. Segurança e reparos urgentes prevalecem sobre ganhos energéticos.
+
+O README reúne a análise completa e limitações; `resultados_avp2.json`
+registra variâncias, inércias, silhouettes, tamanhos e perfis da execução.
